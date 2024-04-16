@@ -1,0 +1,62 @@
+/****** Object:  UserDefinedFunction [dbo].[ВстроеннаяТабличнаяФункция_Календарь]    Script Date: 12.05.2023 19:42:36 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE function [dbo].[ВстроеннаяТабличнаяФункция_Календарь]() returns table
+as return (
+
+WITH Десять AS(
+SELECT * FROM (VALUES(1),(1),(1),(1),(1),(1),(1),(1),(1),(1)) T(n)  
+),
+Миллионы AS(
+SELECT RowNum = ROW_NUMBER() OVER (ORDER BY (SELECT '1') )
+FROM Десять t1
+CROSS JOIN Десять t2
+CROSS JOIN Десять t3
+CROSS JOIN Десять t4
+CROSS JOIN Десять t5
+),
+КалендарьГригорианский as(
+SELECT 
+Дата				=  DATEADD(d,RowNum-1, cast('19900101' as date) )
+FROM Миллионы
+),
+ДополнительныеПоля as(
+select 
+ Дата					 =  Дата
+,Год					 =  YEAR(Дата)
+,Месяц				 =  MONTH(Дата)
+,ДеньГода			 =  DATEPART(DAYOFYEAR, Дата)
+,ДеньМесяца		 =  DAY(Дата)
+,[День_недели] = case when DATENAME(weekday,Дата)='Monday' then 1 when DATENAME(weekday,Дата)='Tuesday' then 2 when DATENAME(weekday,Дата)='Wednesday' then 3 when DATENAME(weekday,Дата)='Thursday' then 4 when DATENAME(weekday,Дата)='Friday' then 5 when DATENAME(weekday,Дата)='Saturday' then 6 when DATENAME(weekday,Дата)='Sunday' then 7 end
+,[Прошло_дней] = CASE WHEN Дата<DATEADD(DD,-1,GETDATE()) THEN 1 ELSE 0 END
+from КалендарьГригорианский 
+),
+КалендарьЮлианский as(
+select 
+ [Григорианская_дата]																	= Дата
+,[Юлианская_дата]																			= (Год - 1900) * 1000 + ДеньГода
+,[Год]																								= Год		 
+,[Квартал]																						= DATEPART(QUARTER, Дата)
+,[Месяц]																							= Месяц
+,[Месяц_года]																					= CONCAT(CASE WHEN Месяц=1 THEN 'Январь ' WHEN Месяц=2 THEN 'Февраль ' WHEN Месяц=3 THEN 'Март ' WHEN Месяц=4 THEN 'Апрель ' WHEN Месяц=5 THEN 'Май ' WHEN Месяц=6 THEN 'Июнь ' WHEN Месяц=7 THEN 'Июль ' WHEN Месяц=8 THEN 'Август ' WHEN Месяц=9 THEN 'Сентябрь ' WHEN Месяц=10 THEN 'Октябрь ' WHEN Месяц=11 THEN 'Ноябрь ' WHEN Месяц=12 THEN 'Декабрь ' end, Год)         
+,[Последний_день_месяца]															= EOMONTH(Дата)
+,[Первый_день_месяца]																	= DATEFROMPARTS(Год,Месяц,1)
+,[День_года]																					= ДеньГода
+,[День_месяца]																				= ДеньМесяца
+,[День_недели]																				= [День_недели]
+,[День]																								= convert(varchar(4),ДеньМесяца) + ' ' + convert(varchar(4),[Месяц]) + ' ' + convert(varchar(4),[Год])
+,[Дней_в_месяце]																			= COUNT(ДеньМесяца) OVER (PARTITION BY Год,Месяц)
+,[Дней_в_месяце_кроме_сб_и_вс]												= SUM(CASE WHEN [День_недели]<6 THEN 1 ELSE 0 END) OVER (PARTITION BY Год,Месяц)
+,[Прошло_дней]																				= [Прошло_дней]
+,[Прошло_дней_накопительно_по месяцам]								= SUM([Прошло_дней]) OVER (PARTITION BY Год,Месяц)
+,[Прошло_дней_накопительно_по месяцам_кроме_сб_и_вс]	= SUM(case when [День_недели]<6 then [Прошло_дней] else 0 end) OVER (PARTITION BY Год,Месяц)
+from ДополнительныеПоля where Год<=YEAR(getdate())
+)
+select *
+from КалендарьЮлианский
+--ORDER BY [Григорианская_дата] DESC
+
+
+)
